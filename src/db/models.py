@@ -1,8 +1,6 @@
 import psycopg2
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr
-from pathlib import Path
-from typing import override
 
 
 class DBConfig(BaseSettings):
