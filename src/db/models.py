@@ -2,10 +2,14 @@ import psycopg2
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr
 from pathlib import Path
+from typing import override
 
 
 class DBConfig(BaseSettings):
     """ Database configuration loaded from environment variables.
+
+    Environment variables are expected to use the ``DB_`` prefix and be read
+    from the provided environment file.
 
     Attributes:
         name (str): Database name.
@@ -14,11 +18,6 @@ class DBConfig(BaseSettings):
         password (SecretStr): Password for authentication.
         port (int): Port number used to connect to the database.
         ssl_mode (str): SSL mode used for the connection.
-
-    Model Config:
-        env_prefix (str): Prefix of environment variables (``DB_``).
-        env_file_encoding (str): UTF-8 Encoding used when reading the environment file.
-
     """
     name: str
     user: str
@@ -29,37 +28,12 @@ class DBConfig(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="DB_",
-        env_file_encoding="utf-8"
+        env_file_encoding="utf-8",
+        extra="ignore",  # optional but recommended
     )
 
-    def __init__(self, env_file: Path | str, **kwargs):
-        """ Initialises the db instance.
-
-        Validates that the provided environment file exists and injects it
-        into the model configuration.
-
-        Args:
-            env_file (Path | str): Path to the environment file.
-            **kwargs: Additional keyword arguments passed to ``BaseSettings``.
-
-        Raises:
-            ValueError: If ``env_file`` is not provided.
-            FileNotFoundError: If the specified ``env_file`` does not exist.
-        """
-        if not env_file:
-            raise ValueError("env_file must be provided")
-
-        env_path = Path(env_file)
-        if not env_path.exists():
-            raise FileNotFoundError("env_file does not exist")
-
-        # override the env_file in model_config
-        self.model_config["env_file"] = env_path
-
-        super().__init__(**kwargs)
-
     def get_conn(self) -> psycopg2.extensions.connection:
-        """ Return a psycopg2 connection using the db database credentials.
+        """ Create and return a psycopg2 connection using the configured credentials.
 
         Returns:
             connection: psycopg2.extensions.connection
@@ -88,6 +62,7 @@ class DBConfig(BaseSettings):
                 print("Connection successful:", cursor.fetchone())
             except psycopg2.OperationalError as e:
                 print("Connection failed:", e)
+                raise
 
     def pretty(self, show_private: bool = False) -> str:
         """ Pretty print DBConfig attributes. Hides user password by default.
@@ -106,6 +81,7 @@ class DBConfig(BaseSettings):
         )
 
         return (
+            "\n"
             "DB Configuration\n"
             "----------------\n"
             f"Name:       {self.name}\n"
