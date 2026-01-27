@@ -1,6 +1,8 @@
+from pathlib import Path
+from typing import Any, override
 import psycopg2
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 
 class DBConfig(BaseSettings):
@@ -29,6 +31,53 @@ class DBConfig(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",  # optional but recommended
     )
+
+    @override
+    def __init__(self, env_file: Path | str, **kwargs: Any):
+        """ Initialises the db instance.
+
+        Validates that the provided environment file exists and injects it
+        into the model configuration. It will then test the connection to the database.
+
+        Args:
+            env_file (Path | str): Path to the environment file.
+            **kwargs: Additional keyword arguments passed to ``BaseSettings``.
+
+        Raises:
+            ValueError: If ``env_file`` is not provided.
+            FileNotFoundError: If the specified ``env_file`` does not exist.
+            ValidationError: If ``env_file`` is formatted incorrectly.
+        """
+
+        # Check env file argument is provided
+        if not env_file:
+            raise ValueError("env_file must be provided")
+
+        # Check env file exists
+        env_path = Path(env_file)
+        if not env_path.exists():
+            raise FileNotFoundError("env_file does not exist")
+
+        # Validate environement variables file
+        try:
+            super().__init__(**kwargs, _env_file=env_path)
+
+        except ValidationError as e:
+            msg = (
+                f"Your environment file '{env_path}' is missing required DB_ variables.\n"
+                f"Expected format:\n"
+                f"  DB_NAME=your_database\n"
+                f"  DB_USER=your_username\n"
+                f"  DB_PASSWORD=your_password\n"
+                f"  DB_HOST=localhost\n"
+                f"  DB_PORT=5432\n"
+                f"  DB_SSL_MODE=require\n"
+            )
+
+            raise ValueError(msg) from e
+
+        self.test_connection()
+
 
     def get_conn(self) -> psycopg2.extensions.connection:
         """ Create and return a psycopg2 connection using the configured credentials.
